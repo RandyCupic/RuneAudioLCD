@@ -153,7 +153,7 @@ class lcd:
    def lcd_write_char(self, charvalue, mode=1):
       self.lcd_write_four_bits(mode | (charvalue & 0xF0))
       self.lcd_write_four_bits(mode | ((charvalue << 4) & 0xF0))
-
+	  
 # Set the display width
    def setWidth(self,width):
 	self.width = width
@@ -235,14 +235,16 @@ class lcd:
 
    def message(self, text):
 		count = 1
+		self.lcd_write(LCD_LINE_1)
+		
 		for char in text:
 			if char == '\n':
 				if (count == 1 and self.width >= 2):
-					self.lcd_write(0xC0)
+					self.lcd_write(LCD_LINE_2)
 				elif (count == 2 and self.width >= 3):
-					self.lcd_write(0x94)
+					self.lcd_write(LCD_LINE_3)
 				elif (count == 3 and self.width >= 4):
-					self.lcd_write(0xD4)
+					self.lcd_write(LCD_LINE_4)
 				count = count + 1
 			else:
 				self.lcd_write_char(ord(char))
