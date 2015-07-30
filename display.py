@@ -1,10 +1,12 @@
-import i2c_driver as LCD # import I2C driver for LCD display
-import time, math, threading
+import time, math, threading, abc
 
 class display:
+	__metaclass__ = abc.ABCMeta
+
 	# Class constructor, receives I2C address of display (usually it's 0x27, check with i2cdetect)
 	# Also, number of rows and columns (for example, 2x16 or 4x20 LCD)
 	def __init__(self, address, rows, columns, temp_screen_period, scroll_period):
+		self.address = address
 		self.rows = rows
 		self.columns = columns
 		
@@ -12,8 +14,7 @@ class display:
 		self.period = 0.01 # s
 		
 		# Initialize LCD
-		self.lcd = LCD.lcd(address)
-		self.lcd.setWidth(self.columns)
+		self.lcd_initialize()
 		
 		# Unlock the display; this variable is used to prevent multiple write to display
 		self.lock_display = False
@@ -43,6 +44,9 @@ class display:
 		# Select first screen
 		self.screen = 0
 		
+		# Initially, there's no temporary screen (like volume)
+		self.temporary_screen = False
+		
 		# Current wait time for display
 		self.wait_time = 0
 		
@@ -55,9 +59,62 @@ class display:
 		self.play_mode_type = 0
 		self.play_mode_state = False
 		
+		# Initially, data didn't changed
+		self.data_changed = False
+		self.time_changed = False
+		
+		# We don't have enough space for custom characters so we have to load them when needed
+		# But it takes resources so we will load them into LCD only if needed
+		# This variable contains currently loaded characters:
+		# 0 - play/pause/stop icons
+		# 1 - volume
+		# 2 - shuffle
+		# 3 - repeat all
+		# 4 - repeat single
+		self.current_custom_chars = -1 # Initially we want it to load something
+		
+	''' LCD METHODS '''
+	# These methods are abstract; if you want to use any other library to write to LCD
+	# Just inherit this display class and implement (override) these methods
+	
+	''' ABSTRACT METHOD, YOU HAVE TO IMPLEMENT IT IN INHERITED CLASS '''
+	@abc.abstractmethod
+	def lcd_initialize(self):
+		# This method initializes the display
+		# It MUST return LCD instance!!
+		return
+	
+	''' ABSTRACT METHOD, YOU HAVE TO IMPLEMENT IT IN INHERITED CLASS '''
+	@abc.abstractmethod
+	def lcd_backlight(self, state):
+		# This method turns on and off LCD backlight
+		# It receives True or False
+		return
+	
+	''' ABSTRACT METHOD, YOU HAVE TO IMPLEMENT IT IN INHERITED CLASS '''
+	@abc.abstractmethod
+	def lcd_message(self, message):
+		# This method writes the whole message to the LCD display
+		# To go to the new line, it uses "\n" character
+		return
+	
+	''' ABSTRACT METHOD, YOU HAVE TO IMPLEMENT IT IN INHERITED CLASS '''	
+	@abc.abstractmethod
+	def lcd_load_custom_chars(self, data): 
+		# This method loads custom characters in LCD display
+		# It receives an array with data for each custom character
+		# Each array item contains 8 values for each line in one box
+		''' EXAMPLE '''
+		''' data = [
+				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ],
+				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ],
+				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ]
+		] '''
+		# This will load 3 custom characters (stop, play, pause icons) on places 0-2
+		return
 		
 	# We need to register MPD client to be able to retrieve data from it
-	def register_mpd(self, mpd):
+	def register(self, mpd):
 		self.mpd = mpd
 		
 	# Function for updating LCD display
@@ -69,14 +126,7 @@ class display:
 			if (i != (self.rows - 1)):
 				tmp = tmp + '\n';
 
-		self.lcd.message(tmp);
-	
-	# Toggle LCD backlight on/off
-	def backlight(self, state):
-		if (state):
-			self.lcd.backlight(1);
-		else:
-			self.lcd.backlight(0);
+		self.lcd_message(tmp);
 			
 	# Function for scrolling text, receives row id and text
 	# Every time it's called, it will scroll one character
@@ -134,8 +184,10 @@ class display:
 				[ 0b00001, 0b00001, 0b00001, 0b10001, 0b01001, 0b00101, 0b00011, 0b00001 ]
 		]
 		
-		# Load custom characters
-		self.lcd.lcd_load_custom_chars(speaker_icon)
+		# Load custom characters if needed
+		if (self.current_custom_chars != 1):
+			self.lcd_load_custom_chars(speaker_icon)
+			self.current_custom_chars = 1
 		
 		# Show first part of icon + "volume"
 		self.display_data[1] = chr(0) + chr(1) + ' Volume'
@@ -178,8 +230,12 @@ class display:
 			temp = (self.volume_value / int(math.ceil((100.0 / (self.columns - 3))))) + 1
 			
 			# Append the blocks
-			for i in range (0, temp):
+			for i in range (temp):
 				self.display_data[2] += chr(255)
+				
+			# Fill remaining space with ' '
+			for i in range (self.columns - temp - 3):
+				self.display_data[2] += ' '
 			
 		# We will leave first line empty for now
 		self.display_data[0] = ''
@@ -195,7 +251,6 @@ class display:
 		while (self.lock_display):
 			pass
 		self.lock_display = True
-		self.lcd.lcd_clear()
 		self.update_display()
 		self.lock_display = False
 		
@@ -234,8 +289,10 @@ class display:
 			icon = repeat_single_icon
 			text = "Repeat One"
 		
-		# Load custom characters
-		self.lcd.lcd_load_custom_chars(icon)
+		# Load custom characters if needed
+		if (self.current_custom_chars != (self.play_mode_type + 2)):
+			self.lcd_load_custom_chars(icon)
+			self.current_custom_chars = (self.play_mode_type + 2)
 		
 		# Show first part of icon
 		self.display_data[1] = chr(0) + chr(1)
@@ -301,7 +358,6 @@ class display:
 		while (self.lock_display):
 			pass
 		self.lock_display = True
-		self.lcd.lcd_clear()
 		self.update_display()
 		self.lock_display = False
 		
@@ -317,13 +373,82 @@ class display:
 		self.play_mode_type = type
 		self.play_mode_state = state
 		self.play_mode_screen = True
+		
+	# This function is called by MPD when data changes (for example, song)
+	def data_change(self):
+		self.data_changed = True
+	
+	# This function is called by MPD when time changes (for example, second passed in elapsed time)
+	def time_change(self):
+		self.time_changed = True
+		
+	# Convert seconds to M:S (type = 0), H:M:S (type = 1) or D:H:M:S (type = 2)
+	def convert_time(self, seconds, type):
+		# Initialize
+		sec = 0
+		min = 0
+		hour = 0
+		day = 0
+	
+		# In any type, we need seconds
+		sec = seconds % 60;
+		
+		# M:S type, get seconds
+		if (type == 0):
+			min = int( int(seconds) / 60 )
+		
+		# H:M:S type, get hours and seconds
+		elif (type == 1):
+			min = int( int(seconds) / 60 ) % 60
+			hour = int( int(seconds) / 3600 )
+		
+		# D:H:M:S type, get days, hours and seconds
+		elif (type == 2):
+			min = int( int(seconds) / 60 ) % 60
+			hour = int( int(seconds) / 3600 ) % 24
+			day = int ( int(seconds) / 86400 )
+			
+		temp = ''
+		
+		# Create string to return
+		if (sec < 10):
+			temp += '0' + `sec`
+		else:
+			temp += `sec`
+			
+		if (min < 10):
+			temp = '0' + `min` + ':' + temp
+		else:
+			temp = `min` + ':' + temp
+			
+		if (type == 1):
+			if (hour < 10):
+				temp = '0' + `hour` + ':' + temp
+			else:
+				temp = `hour` + ':' + temp
+				
+		if (type == 2):
+			temp = `day` + 'd ' + temp
+
+				
+		return temp
 			
 	# Screen 0 shows artist and song name, times and track info
 	def screen_0(self):
 		data_changed = False
+		
+		# Play/pause/stop icons
+		state_icons = [
+				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ],
+				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ],
+				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ]
+		]
 	
 		# FIRST ROW: Get artist data from MPD and pass it to scroll function
-		temp = self.scroll_row(0, self.mpd.get_data()['artist'])
+		try:
+			temp = self.scroll_row(0, self.mpd.getData()['artist'])
+		except KeyError:
+			temp = ''
 		
 		# Check if data has changed
 		if (temp != self.display_data[0]):
@@ -331,12 +456,145 @@ class display:
 			data_changed = True
 		
 		# SECOND ROW: Get song name data from MPD and pass it to scroll function
-		temp = self.scroll_row(1, self.mpd.get_data()['song'])
+		try:
+			temp = self.scroll_row(1, self.mpd.getData()['title'])
+		except KeyError:
+			temp = ''
 		
 		# Check if data has changed
 		if (temp != self.display_data[1]):
 			self.display_data[1] = temp
 			data_changed = True
+			
+		temp = ''
+			
+		# If file is playing
+		if (self.mpd.getData()['type'] == 0):
+			# Get elapsed time
+			elapsed_time = self.convert_time(self.mpd.getData()['elapsed_time'], 0)
+			
+			# Get total track time
+			total_time = self.convert_time(self.mpd.getData()['total_time'], 0)
+			
+			# Get state icon
+			icon = chr(self.mpd.getData()['state'])
+			
+			temp = ''
+			
+			# Show elapsed_time
+			temp += elapsed_time
+			
+			# We have to center the icon so we have to count how much spaces to put
+			space_count = (self.columns - len(elapsed_time) - len(total_time) - 1) # -1 is for icon
+			
+			# We have to be careful for numbers not dividable by 2
+			if ((space_count % 2) != 0):
+				i = space_count / 2 + 1
+			else:
+				i = space_count / 2
+				
+			# Fill spaces
+			for j in range(space_count / 2):
+				temp += ' '
+				
+			# Show icon
+			temp += icon
+			
+			# Fill remaining spaces
+			for j in range (i):
+				temp += ' '
+				
+			# Show total time
+			temp += total_time
+			
+		# else if radio is playing
+		elif (self.mpd.getData()['type'] == 1):
+			# Get elapsed time
+			elapsed_time = self.convert_time(self.mpd.getData()['elapsed_time'], 1)
+			
+			# Get state icon
+			icon = chr(self.mpd.getData()['state'])
+			
+			temp = ''
+			
+			# Show elapsed_time
+			temp += elapsed_time
+			
+			# Show something instead total time
+			if (self.columns >= 20):
+				word = 'STREAMING'
+			else:
+				word = 'STREAM'
+			
+			# We have to center the icon so we have to count how much spaces to put
+			space_count = (self.columns - len(elapsed_time) - len(word) - 1) # -1 is for icon, -6 is for length of 'STREAM'
+			
+			# We have to be careful for numbers not dividable by 2
+			if ((space_count % 2) != 0):
+				i = space_count / 2 + 1
+			else:
+				i = space_count / 2
+				
+			# Fill spaces
+			for j in range(space_count / 2):
+				temp += ' '
+				
+			# Show icon
+			temp += icon
+			
+			# Fill remaining spaces
+			for j in range (i):
+				temp += ' '
+				
+			# Show the word
+			temp += word
+			
+		# Check if data has changed
+		if (temp != self.display_data[2]):
+			self.display_data[2] = temp
+			data_changed = True
+			
+		# Last line shows RADIO/FILE and bitrate
+		if (self.mpd.getData()['type'] == 0):
+			word = "FILE"
+			
+		elif (self.mpd.getData()['type'] == 1):
+			word = "RADIO"
+		
+		# Get bitrate
+		bitrate = `self.mpd.getData()['bitrate']` + ' kbps'
+		
+		# Show type
+		temp = word
+		
+		# Between word and bitrate we will fill spaces
+		for i in range(self.columns - len(word) - len(bitrate)):
+			temp += ' '
+			
+		# Show bitrate
+		temp += bitrate
+		
+		# Check if data has changed
+		if (temp != self.display_data[3]):
+			self.display_data[3] = temp
+			data_changed = True
+			
+		if (data_changed):
+			# Load custom characters, if needed
+			if (self.current_custom_chars != 0):
+				self.lcd_load_custom_chars(state_icons)
+				self.current_custom_chars = 0
+				
+			while (self.lock_display):
+				continue
+			
+			self.lock_display = True
+			self.update_display()
+			self.lock_display = False
+			
+			data_changed = False
+			
+		self.wait_time = self.scroll_period
 			
 	# Main function which is running all the time to update display
 	def main_function(self):
@@ -349,19 +607,39 @@ class display:
 				self.volume_screen = False
 				self.show_volume()
 				self.wait_time = self.temporary_screen_period
+				self.temporary_screen = True
 				
 			# Check if play mode is set
 			if (self.play_mode_screen):
 				self.play_mode_screen = False
 				self.show_play_mode()
 				self.wait_time = self.temporary_screen_period
+				self.temporary_screen = True
+				
+			# Check if data changed - time to update display
+			if (self.data_changed):
+				self.data_changed = False
+				self.wait_time = 0 # Skip waiting
+				
+			# Check if time has changed
+			if (self.time_changed):
+				self.time_changed = False
+				
+				# If there's a temporary screen (volume), we don't want to interrupt it by clock
+				if (self.temporary_screen == False):
+					self.wait_time = 0
 			
 			# Check if there's a wait time to pass
 			if (self.wait_time > 0):
 				self.wait_time -= 1
 				continue
+			
+			# Temporary screen passed
+			self.temporary_screen = False
 				
-			update_enable = False
+			self.screen_0()
+				
+			'''update_enable = False
 				
 			#pom1 = self.scroll_row(0, 'Paul van Dyk feat. Sue McLaren')
 			#pom2 = self.scroll_row(1, 'Lights (Original Paul van Dyk Radio Edit')
@@ -386,7 +664,7 @@ class display:
 					self.display_data[3] += ' '
 					
 				while (self.lock_display):
-					pass			
+					continue			
 				
 				self.lock_display = True
 				self.update_display()
@@ -394,7 +672,7 @@ class display:
 				
 				update_enable = False
 				
-			self.wait_time = self.scroll_period
+			self.wait_time = self.scroll_period'''
 				
 	# Function for starting display thread
 	def start(self):
