@@ -222,11 +222,9 @@ class mpd_client:
 			except KeyError:
 				self.data['bitrate'] = 0
 		
-		# Else, put everything to zero
+		# Else, put elapsed time to zero
 		else:
-			self.data['total_time'] = 0
-			self.data['elapsed'] = 0
-			self.data['bitrate'] = 0		
+			self.data['elapsed_time'] = 0		
 		
 		# Get total playtime and uptime from last reboot
 		try:

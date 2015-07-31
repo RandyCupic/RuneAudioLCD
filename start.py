@@ -1,4 +1,4 @@
-import i2c_display, mpd_client, time
+import i2c_display, mpd_client, ir_remote, time
 
 #########  MPD PARAMETERS  ##############
 # Only if you know what you're doing! 	#
@@ -8,13 +8,18 @@ PASSWORD = False						#
 CON_ID = {'host':HOST, 'port':PORT}		#
 #########################################
 
-display = i2c_display.i2c_display(0x27, 4, 20, 5, 0.1);
+display = i2c_display.i2c_display(0x27, 2, 16, 5, 0.1);
 mpdcl = mpd_client.mpd_client(CON_ID, PASSWORD)
+remote = ir_remote.remote("/tmp/irpipe")
 
 display.register(mpdcl)
 mpdcl.register(display)
+remote.register_display(display)
 display.start()
+remote.start()
 mpdcl.mpdMain()
+
+print "test"
 
 '''display.start()
 

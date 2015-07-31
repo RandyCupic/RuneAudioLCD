@@ -44,6 +44,9 @@ class display:
 		# Select first screen
 		self.screen = 0
 		
+		# Number of screens
+		self.screens = 2
+		
 		# Initially, there's no temporary screen (like volume)
 		self.temporary_screen = False
 		
@@ -184,68 +187,74 @@ class display:
 				[ 0b00001, 0b00001, 0b00001, 0b10001, 0b01001, 0b00101, 0b00011, 0b00001 ]
 		]
 		
+		# If display is 4x20, this will be displayed in lines 2 and 3, otherwise 1 and 2 (2x16)
+		if (self.rows >= 4):
+			skip_lines = 1
+		else:
+			skip_lines = 0
+		
 		# Load custom characters if needed
 		if (self.current_custom_chars != 1):
 			self.lcd_load_custom_chars(speaker_icon)
 			self.current_custom_chars = 1
 		
 		# Show first part of icon + "volume"
-		self.display_data[1] = chr(0) + chr(1) + ' Volume'
+		self.display_data[skip_lines] = chr(0) + chr(1) + ' Volume'
 		
 		# Show second part of icon
-		self.display_data[2] = chr(2) + chr(3) + ' '
+		self.display_data[skip_lines + 1] = chr(2) + chr(3) + ' '
 		
 		# If volume is 0 or 100 ...
 		if (self.volume_value == 0 or self.volume_value == 100):
 			# Fill spaces between; columns - 3 (2 for icon + space) - 12 (length of 'VolumeMIN' or 'VolumeMAX')
 			for i in range(self.columns - 12):
-				self.display_data[1] += ' '
+				self.display_data[skip_lines] += ' '
 		
 		# If volume is 0, show minimum and no blocks in third line
 		if (self.volume_value == 0):
-			self.display_data[1] += 'MIN'
+			self.display_data[skip_lines] += 'MIN'
 			for i in range(self.columns - 3): # -3 for icon (2) and space
-				self.display_data[2] += ' '
+				self.display_data[skip_lines + 1] += ' '
 		
 		# If volume is 100, show maximum and all blocks in third line	
 		elif (self.volume_value == 100):
-			self.display_data[1] += 'MAX'
+			self.display_data[skip_lines] += 'MAX'
 			for i in range(self.columns - 3):
-				self.display_data[2] += chr(255)
+				self.display_data[skip_lines + 1] += chr(255)
 		
 		# Else, show value in % and the corresponding number of blocks
 		else:
 			# Fill spaces between; columns - 3 (icon + space) - 10 (length of 'VolumeXX %)
 			for i in range(self.columns - 13):
-				self.display_data[1] += ' '
+				self.display_data[skip_lines] += ' '
 		
 			# Check if there is only one digit and append another space
 			if (self.volume_value < 10):
-				self.display_data[1] += ' '
+				self.display_data[skip_lines] += ' '
 			
 			# Append volume value
-			self.display_data[1] += `self.volume_value` + ' %'
+			self.display_data[skip_lines] += `self.volume_value` + ' %'
 			
 			# Calculate number of blocks to show
 			temp = (self.volume_value / int(math.ceil((100.0 / (self.columns - 3))))) + 1
 			
 			# Append the blocks
 			for i in range (temp):
-				self.display_data[2] += chr(255)
+				self.display_data[skip_lines + 1] += chr(255)
 				
 			# Fill remaining space with ' '
 			for i in range (self.columns - temp - 3):
-				self.display_data[2] += ' '
+				self.display_data[skip_lines + 1] += ' '
 			
-		# We will leave first line empty for now
-		self.display_data[0] = ''
-		for i in range(self.columns):
-			self.display_data[0] += ' '
+		# If display is 4x20, we will leave first and forth line empty for now
+		if (self.rows >= 4):
+			self.display_data[0] = ''
+			for i in range(self.columns):
+				self.display_data[0] += ' '
 		
-		# We will leave forth line empty for now
-		self.display_data[3] = ''
-		for i in range(self.columns):
-			self.display_data[3] += ' '
+			self.display_data[3] = ''
+			for i in range(self.columns):
+				self.display_data[3] += ' '
 			
 		# At the end, update the display
 		while (self.lock_display):
@@ -278,6 +287,12 @@ class display:
 				[ 0b00000, 0b00000, 0b00010, 0b00100, 0b11000, 0b00000, 0b00000, 0b00000 ]
 		]
 		
+		# If display is 4x20, this will be displayed in lines 2 and 3, otherwise 1 and 2 (2x16)
+		if (self.rows >= 4):
+			skip_lines = 1
+		else:
+			skip_lines = 0
+		
 		# Choose icon and text, according to type
 		if (self.play_mode_type == 0):
 			icon = shuffle_icon
@@ -295,10 +310,10 @@ class display:
 			self.current_custom_chars = (self.play_mode_type + 2)
 		
 		# Show first part of icon
-		self.display_data[1] = chr(0) + chr(1)
+		self.display_data[skip_lines] = chr(0) + chr(1)
 		
 		# Show second part of icon
-		self.display_data[2] = chr(2) + chr(3)
+		self.display_data[skip_lines + 1] = chr(2) + chr(3)
 		
 		# We need to center the text so we have to calculate how much spaces depending on screen width
 		temp = self.columns - 2 - len(text) # 2 (for icon) and length of text
@@ -310,14 +325,14 @@ class display:
 			lside = (temp / 2)
 			
 		for i in range(lside):
-			self.display_data[1] += ' '
+			self.display_data[skip_lines] += ' '
 			
 		# Add the text
-		self.display_data[1] += text
+		self.display_data[skip_lines] += text
 		
 		# Add spaces from right side
 		for i in range(temp / 2):
-			self.display_data[1] += ' '
+			self.display_data[skip_lines] += ' '
 			
 		# Now it's time for second row, check if shuffle is enabled or disabled:
 		if (self.play_mode_state == True):
@@ -330,10 +345,10 @@ class display:
 		
 		# Add spaces from left side			
 		for i in range(temp / 2):
-			self.display_data[2] += ' '
+			self.display_data[skip_lines + 1] += ' '
 			
 		# Add the text
-		self.display_data[2] += temp_text
+		self.display_data[skip_lines + 1] += temp_text
 		
 		# Add spaces from right side
 		if ((temp % 2) != 0):
@@ -342,17 +357,19 @@ class display:
 			rside = (temp / 2)
 			
 		for i in range(rside):
-			self.display_data[2] += ' '
-			
-		# We will leave first line empty for now
-		self.display_data[0] = ''
-		for i in range(self.columns):
-			self.display_data[0] += ' '
+			self.display_data[skip_lines + 1] += ' '
 		
-		# We will leave forth line empty for now
-		self.display_data[3] = ''
-		for i in range(self.columns):
-			self.display_data[3] += ' '
+		# If display is 4x20 ...
+		if (self.rows >= 4):
+			# We will leave first line empty for now
+			self.display_data[0] = ''
+			for i in range(self.columns):
+				self.display_data[0] += ' '
+			
+			# We will leave forth line empty for now
+			self.display_data[3] = ''
+			for i in range(self.columns):
+				self.display_data[3] += ' '
 			
 		# At the end, update the display
 		while (self.lock_display):
@@ -381,6 +398,18 @@ class display:
 	# This function is called by MPD when time changes (for example, second passed in elapsed time)
 	def time_change(self):
 		self.time_changed = True
+		
+	# This function is called by remote or button to change screen mode
+	def change_screen(self):
+		# For 4x20 display, jump by 2, for 2x16 by 1
+		if (self.rows >= 4):
+			self.screen += 2
+		else:
+			self.screen += 1
+			
+		# If we reached the end, let's go from beginning
+		if (self.screen >= self.screens):
+			self.screen = 0
 		
 	# Convert seconds to M:S (type = 0), H:M:S (type = 1) or D:H:M:S (type = 2)
 	def convert_time(self, seconds, type):
@@ -434,15 +463,9 @@ class display:
 		return temp
 			
 	# Screen 0 shows artist and song name, times and track info
+	# Returns whether the data has changed or not
 	def screen_0(self):
 		data_changed = False
-		
-		# Play/pause/stop icons
-		state_icons = [
-				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ],
-				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ],
-				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ]
-		]
 	
 		# FIRST ROW: Get artist data from MPD and pass it to scroll function
 		try:
@@ -466,7 +489,27 @@ class display:
 			self.display_data[1] = temp
 			data_changed = True
 			
+		return data_changed
+		
+	# This screen shows time and track/station info
+	# Returns whether the data has changed or not
+	def screen_1(self):
+		data_changed = False
+	
+		# Play/pause/stop icons
+		state_icons = [
+				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ],
+				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ],
+				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ]
+		]
+	
 		temp = ''
+		
+		# If display is 4x20, this will be displayed in lines 3 and 4, otherwise 1 and 2 (2x16)
+		if (self.rows >= 4):
+			skip_lines = 2
+		else:
+			skip_lines = 0
 			
 		# If file is playing
 		if (self.mpd.getData()['type'] == 0):
@@ -508,7 +551,7 @@ class display:
 			temp += total_time
 			
 		# else if radio is playing
-		elif (self.mpd.getData()['type'] == 1):
+		elif (self.mpd.getData()['type'] == 1):		
 			# Get elapsed time
 			elapsed_time = self.convert_time(self.mpd.getData()['elapsed_time'], 1)
 			
@@ -550,8 +593,8 @@ class display:
 			temp += word
 			
 		# Check if data has changed
-		if (temp != self.display_data[2]):
-			self.display_data[2] = temp
+		if (temp != self.display_data[skip_lines]):
+			self.display_data[skip_lines] = temp
 			data_changed = True
 			
 		# Last line shows RADIO/FILE and bitrate
@@ -575,26 +618,18 @@ class display:
 		temp += bitrate
 		
 		# Check if data has changed
-		if (temp != self.display_data[3]):
-			self.display_data[3] = temp
+		if (temp != self.display_data[skip_lines + 1]):
+			self.display_data[skip_lines + 1] = temp
 			data_changed = True
 			
+		# If data changed, see if there's a need to load custom charachters
 		if (data_changed):
 			# Load custom characters, if needed
 			if (self.current_custom_chars != 0):
 				self.lcd_load_custom_chars(state_icons)
 				self.current_custom_chars = 0
-				
-			while (self.lock_display):
-				continue
-			
-			self.lock_display = True
-			self.update_display()
-			self.lock_display = False
-			
-			data_changed = False
-			
-		self.wait_time = self.scroll_period
+		
+		return data_changed
 			
 	# Main function which is running all the time to update display
 	def main_function(self):
@@ -636,43 +671,43 @@ class display:
 			
 			# Temporary screen passed
 			self.temporary_screen = False
-				
-			self.screen_0()
-				
-			'''update_enable = False
-				
-			#pom1 = self.scroll_row(0, 'Paul van Dyk feat. Sue McLaren')
-			#pom2 = self.scroll_row(1, 'Lights (Original Paul van Dyk Radio Edit')
 			
-			pom1 = self.scroll_row(0, 'Paul van Dyk feat. Sue McLaren')
-			pom2 = self.scroll_row(1, 'Lights')
-				
-			if (self.display_data[0] != pom1 and self.wait_time == 0):
-				self.display_data[0] = pom1					
-				update_enable = True
-				
-			if (self.display_data[1] != pom2 and self.wait_time == 0):
-				self.display_data[1] = pom2
-				update_enable = True
-
-			if (update_enable):
-				self.display_data[2] = ''
-				self.display_data[3] = ''
-				
-				for i in range(self.columns):
-					self.display_data[2] += ' '
-					self.display_data[3] += ' '
+			data_changed = False
+			
+			# If screen 0 is selected
+			if (self.screen == 0):
+				# If display is 4x20
+				if (self.rows >= 4):
+					data_changed1 = self.screen_0()
+					data_changed2 = self.screen_1()
+					data_changed = data_changed1 or data_changed2
 					
+				# Else it's a 2x16
+				else:
+					data_changed = self.screen_0()
+					
+			# Else if screen is 1
+			elif (self.screen == 1):
+				# 1 is only for 2x16 display
+				if (self.rows < 4):
+					data_changed = self.screen_1()
+					
+				# Else return to screen 0
+				else:
+					self.screen == 0
+			
+			# If data has changed, update display
+			if (data_changed):					
 				while (self.lock_display):
-					continue			
+					continue
 				
 				self.lock_display = True
 				self.update_display()
 				self.lock_display = False
 				
-				update_enable = False
+				data_changed = False
 				
-			self.wait_time = self.scroll_period'''
+			self.wait_time = self.scroll_period
 				
 	# Function for starting display thread
 	def start(self):
