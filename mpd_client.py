@@ -115,7 +115,42 @@ class mpd_client:
 				
 		# Return joined list
 		return " ".join(lst)
+		
+	# This function is called by buttons to give commands to MPD
+	def commands(self, command):
+		if (command == 'PLAY'):
+			if (self.data['state'] == 1):
+				self.cmd_client.pause(1)
+			else:
+				self.cmd_client.play()
+				
+		elif (command == 'STOP'):
+			self.cmd_client.stop()
 			
+		elif (command == 'NEXT'):
+			self.cmd_client.next()
+			
+		elif (command == 'PREV'):
+			self.cmd_client.previous()
+			
+		elif (command == 'VDN'):
+			# Get volume value
+			vol = self.data['volume'] - 5
+			
+			if (vol < 0):
+				vol = 0
+			
+			self.cmd_client.setvol(vol)
+			
+		elif (command == 'VUP'):
+			# Get volume value
+			vol = self.data['volume'] + 5
+			
+			if (vol > 100):
+				vol = 100
+			
+			self.cmd_client.setvol(vol)
+		
 	# Function for updating data
 	# Returns which option has been changed (shuffle - 0, repeat all - 1, repeat single - 2, nothing changed - -1)
 	def updateData(self):
