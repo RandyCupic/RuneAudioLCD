@@ -104,15 +104,6 @@ REMOTE_ENABLE = True
 IR_PIPELINE = '/tmp/irpipe'
 #####################################################################
 
-button_pins = {
-	'PLAY_BUTTON': PLAY_BUTTON,
-	'NEXT_BUTTON': NEXT_BUTTON,
-	'PREV_BUTTON': PREV_BUTTON,
-	'VDN_BUTTON': VDN_BUTTON,
-	'VUP_BUTTON': VUP_BUTTON,
-	'STOP_BUTTON': STOP_BUTTON
-}
-
 # Initialize MPD client
 mpdcl = mpd_client.mpd_client(CON_ID, PASSWORD)
 
@@ -142,6 +133,15 @@ if REMOTE_ENABLE:
 
 # If buttons are enabled, initialize them
 if BUTTONS_ENABLE:
+	button_pins = {
+		'PLAY_BUTTON': PLAY_BUTTON,
+		'NEXT_BUTTON': NEXT_BUTTON,
+		'PREV_BUTTON': PREV_BUTTON,
+		'VDN_BUTTON': VDN_BUTTON,
+		'VUP_BUTTON': VUP_BUTTON,
+		'STOP_BUTTON': STOP_BUTTON
+	}
+
 	btn = buttons.buttons(button_pins, BOUNCE_TIME)
 	
 	# Register MPD client
