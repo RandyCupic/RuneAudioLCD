@@ -30,11 +30,6 @@ class mpd_client:
 			if (self.mpdAuth(self.cmd_client, password) == False):
 				print('MPD authentication (for commands) failed!')
 				sys.exit(1)
-				
-		# MPD Ping Thread - we have to ping cmd_client to prevent closing connection		
-		mpdping_t = threading.Thread(target=self.mpdPing, args = ()) # Create thread for pinging MPD
-		mpdping_t.daemon = True # Yep, it's a daemon, when main thread finish, this one will finish too
-		mpdping_t.start() # Start it!
 		
 		# Initialize data container
 		self.data = {
@@ -84,6 +79,34 @@ class mpd_client:
 	# Register LCD client listener
 	def register(self, lcd):
 		self.LCD_client = lcd
+		
+	# Start MPD threads
+	def start(self):
+		# MPD Ping Thread - we have to ping cmd_client to prevent closing connection		
+		self.mpdping_t = threading.Thread(target=self.mpdPing, args = ()) # Create thread for pinging MPD
+		self.mpdping_t.daemon = True # Yep, it's a daemon, when main thread finish, this one will finish too
+		self.mpdping_t.start() # Start it!
+		
+		# Main Thread - Start main thread which waits for changes
+		self.mpd_t = threading.Thread(target=self.mpdMain, args = ()) # Create thread
+		self.mpd_t.daemon = True # Yep, it's a daemon, when main thread finish, this one will finish too
+		self.mpd_t.start() # Start it!
+		
+		# Counter Thread - we have to count elapsed time, playtime and uptime
+		self.counter_t = threading.Thread(target=self.timeCounter, args = ()) # Create thread
+		self.counter_t.daemon = True # Yep, it's a daemon, when main thread finish, this one will finish too
+		self.counter_t.start() # Start it!
+		
+	# Wait for all threads to finish
+	def join(self):
+		# Wait for MPD ping thread to finish
+		self.mpdping_t.join()
+		
+		# Wait for main thread to finish
+		self.mpd_t.join()
+	
+		# Wait for counter thread to finish
+		self.counter_t.join()
 			
 	# Function for setting every first letter of word to uppercase
 	def toUpper(self, data):
@@ -339,12 +362,7 @@ class mpd_client:
 		return self.data
 			
 	# Main function which is running in thread and waiting for changes
-	def mpdMain(self):
-		# Counter Thread - we have to count elapsed time, playtime and uptime
-		self.counter_t = threading.Thread(target=self.timeCounter, args = ()) # Create thread
-		self.counter_t.daemon = True # Yep, it's a daemon, when main thread finish, this one will finish too
-		self.counter_t.start() # Start it!	
-	
+	def mpdMain(self):	
 		while True:
 			# Wait for any change from MPD
 			self.client.send_idle()
@@ -385,6 +403,3 @@ class mpd_client:
 			# Else, if song or something from player changed
 			elif (type == 'player'):
 				self.LCD_client.data_change()
-			
-		# Wait for counter thread to finish
-		self.counter_t.join()
