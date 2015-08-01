@@ -1,4 +1,4 @@
-import time, math, threading, abc
+import time, math, threading, abc, socket, fcntl, struct, sys, os
 
 class display:
 	__metaclass__ = abc.ABCMeta
@@ -45,7 +45,7 @@ class display:
 		self.screen = 0
 		
 		# Number of screens
-		self.screens = 2
+		self.screens = 6
 		
 		# Initially, there's no temporary screen (like volume)
 		self.temporary_screen = False
@@ -75,6 +75,17 @@ class display:
 		# 3 - repeat all
 		# 4 - repeat single
 		self.current_custom_chars = -1 # Initially we want it to load something
+		
+		# Icons for display
+		self.display_icons = [
+				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ], # Stop
+				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ], # Play
+				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ], # Pause
+				[ 0b00000, 0b11111, 0b11011, 0b10001, 0b10001, 0b10001, 0b11111, 0b00000 ], # Ethernet
+				[ 0b00000, 0b00000, 0b00001, 0b00001, 0b00101, 0b00101, 0b10101, 0b00000 ], # Wireless
+				[ 0b00000, 0b01111, 0b01001, 0b01001, 0b01001, 0b11011, 0b11011, 0b00000 ], # Music note
+				[ 0b00000, 0b00100, 0b00100, 0b10101, 0b10101, 0b10001, 0b01110, 0b00000 ]  # Power
+		]
 		
 	''' LCD METHODS '''
 	# These methods are abstract; if you want to use any other library to write to LCD
@@ -450,17 +461,82 @@ class display:
 		else:
 			temp = `min` + ':' + temp
 			
-		if (type == 1):
+		if (type == 1 or type == 2):
 			if (hour < 10):
 				temp = '0' + `hour` + ':' + temp
 			else:
 				temp = `hour` + ':' + temp
 				
 		if (type == 2):
-			temp = `day` + 'd ' + temp
-
-				
+			temp = `day` + ' d, ' + temp
+			
 		return temp
+		
+	# Get IP addresses to show on screen: ifname = eth0 | ifname = elan0
+	def get_ip_address(self, ifname):
+		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		try:
+			return socket.inet_ntoa(fcntl.ioctl(
+				s.fileno(),
+				0x8915,  # SIOCGIFADDR
+				struct.pack('256s', ifname)
+			)[20:24])
+		except IOError:
+			return ''
+			
+	# Return CPU temperature as a character string                                      
+	def getCPUtemperature(self):
+		res = os.popen('/opt/vc/bin/vcgencmd measure_temp').readline()
+		return(res.replace("temp=","").replace("'C\n",""))
+		
+	# Return RAM information (unit=kb) in a list                                        
+	# Index 0: total RAM                                                                
+	# Index 1: used RAM                                                                 
+	# Index 2: free RAM                                                                 
+	def getRAMinfo(self):
+		p = os.popen('free')
+		i = 0
+		while 1:
+			i = i + 1
+			line = p.readline()
+			if i==2:
+				data = line.split()[1:4]
+				break
+				
+		# For 16x2 LCD, remove decimal value (to fit on the screen)
+		if (self.columns < 20):
+			display_format = "{0:.0f}"
+			
+		else:
+			display_format = "{0:.1f}"
+				
+		# Convert it to MB and show as xy.z		
+		temp = []
+		temp.append(display_format.format(int(data[0]) / 1024.0))
+		temp.append(display_format.format(int(data[1]) / 1024.0))
+		temp.append(display_format.format(int(data[2]) / 1024.0))	
+		
+		return temp
+		
+	# Return date and time
+	def get_datetime(self):
+		p = os.popen('date')
+		line = p.readline().strip()
+		data = line.split(' ')
+		
+		# Get clock
+		try:
+			clock = data[4]
+		except KeyError:
+			clock = ''
+			
+		# Get date
+		try:
+			date = data[3] + ' ' + data[1] + ' ' + data[6]
+		except KeyError:
+			date = ''
+		
+		return { 'clock': clock, 'date': date }		
 			
 	# Screen 0 shows artist and song name, times and track info
 	# Returns whether the data has changed or not
@@ -489,20 +565,14 @@ class display:
 			self.display_data[1] = temp
 			data_changed = True
 			
+		self.wait_time = self.scroll_period
+			
 		return data_changed
 		
 	# This screen shows time and track/station info
 	# Returns whether the data has changed or not
 	def screen_1(self):
-		data_changed = False
-	
-		# Play/pause/stop icons
-		state_icons = [
-				[ 0b00000, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b00000 ],
-				[ 0b00000, 0b01000, 0b01100, 0b01110, 0b01110, 0b01100, 0b01000, 0b00000 ],
-				[ 0b00000, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b00000 ]
-		]
-	
+		data_changed = False		
 		temp = ''
 		
 		# If display is 4x20, this will be displayed in lines 3 and 4, otherwise 1 and 2 (2x16)
@@ -594,7 +664,7 @@ class display:
 			
 		# Check if data has changed
 		if (temp != self.display_data[skip_lines]):
-			self.display_data[skip_lines] = temp
+			self.display_data[skip_lines + 1] = temp
 			data_changed = True
 			
 		# Last line shows RADIO/FILE and bitrate
@@ -619,15 +689,245 @@ class display:
 		
 		# Check if data has changed
 		if (temp != self.display_data[skip_lines + 1]):
-			self.display_data[skip_lines + 1] = temp
+			self.display_data[skip_lines] = temp
 			data_changed = True
 			
 		# If data changed, see if there's a need to load custom charachters
 		if (data_changed):
 			# Load custom characters, if needed
 			if (self.current_custom_chars != 0):
-				self.lcd_load_custom_chars(state_icons)
+				self.lcd_load_custom_chars(self.display_icons)
 				self.current_custom_chars = 0
+		
+		return data_changed
+		
+	# This screen shows Ethernet and Wi-Fi IP address, if connected
+	def screen_2(self):
+		data_changed = False
+		temp = ''
+		
+		# Get Ethernet IP
+		ethip = self.get_ip_address('eth0')
+		
+		# If there's no IP address
+		if (ethip == ''):
+			ethip = 'Not connected'
+			
+		# Check if we will show the icon or not
+		if ((len(ethip) + 2) > self.columns):
+			temp = ethip
+		
+		# Else show icon as well
+		else:
+			temp = chr(3) + ' ' + ethip
+			
+		# Will remaining space with ' '
+		for i in range(self.columns - len(temp)):
+			temp += ' '
+			
+		# Check if data changed
+		if (temp != self.display_data[0]):
+			self.display_data[0] = temp
+			data_changed = True
+			
+		temp = ''
+			
+		# Get Wireless IP
+		wifiip = self.get_ip_address('wlan0')
+		
+		# If there's no IP address
+		if (wifiip == ''):
+			wifiip = 'Not connected'
+			
+		# Check if we will show the icon or not
+		if ((len(wifiip) + 2) > self.columns):
+			temp = wifiip
+		
+		# Else show icon as well
+		else:
+			temp = chr(4) + ' ' + wifiip
+			
+		# Will remaining space with ' '
+		for i in range(self.columns - len(temp)):
+			temp += ' '
+			
+		# Check if data changed
+		if (temp != self.display_data[1]):
+			self.display_data[1] = temp
+			data_changed = True
+			
+		self.wait_time = 1000 / self.period
+			
+		return data_changed
+		
+	# This screen shows playtime and total uptime from last reboot
+	def screen_3(self):
+		data_changed = False
+		skip_lines = 0
+		
+		# If it's a 2x16 display, show this in lines 1 and 2, in case of 4x20 display, show it in 3 and 4
+		if (self.rows >= 4):
+			skip_lines = 2
+		
+		else:
+			skip_lines = 0
+		
+		# Get playtime from last reboot
+		playtime = self.convert_time(self.mpd.getData()['playtime'], 2)
+		
+		# If there's enough space for it, convert 'd' to 'days', 3 for 'ays', 2 for icon and space
+		if ((len(playtime) + 3 + 2) <= self.columns):
+			playtime = playtime.replace('d,', 'days,')
+			
+		# Check if there's enough space for showing icon, and add it if it's possible
+		if ((len(playtime) + 2) <= self.columns):
+			playtime = chr(5) + ' ' + playtime
+			
+		# Fill empty space with ' '
+		for i in range(self.columns - len(playtime)):
+			playtime += ' '
+			
+		# Check if data has changed
+		if (playtime != self.display_data[skip_lines]):
+			self.display_data[skip_lines] = playtime
+			data_changed = True
+			
+		# Get uptime from last reboot
+		uptime = self.convert_time(self.mpd.getData()['uptime'], 2)
+		
+		# If there's enough space for it, convert 'd' to 'days', 3 for 'ays', 2 for icon and space
+		if ((len(uptime) + 3 + 2) <= self.columns):
+			uptime = uptime.replace('d,', 'days,')
+			
+		# Check if there's enough space for showing icon, and add it if it's possible
+		if ((len(uptime) + 2) <= self.columns):
+			uptime = chr(6) + ' ' + uptime
+			
+		# Fill empty space with ' '
+		for i in range(self.columns - len(uptime)):
+			uptime += ' '
+			
+		# Check if data has changed
+		if (uptime != self.display_data[skip_lines + 1]):
+			self.display_data[skip_lines + 1] = uptime
+			data_changed = True
+			
+		# If data changed, see if there's a need to load custom charachters
+		if (data_changed):
+			# Load custom characters, if needed
+			if (self.current_custom_chars != 0):
+				self.lcd_load_custom_chars(self.display_icons)
+				self.current_custom_chars = 0
+				
+		self.wait_time = 1000 / self.period
+				
+		return data_changed
+		
+	# Show clock and date
+	def screen_4(self):
+		data_changed = False
+		
+		# Get clock and date
+		data = self.get_datetime()
+		
+		# Show clock label
+		temp = 'Clock'
+		
+		# Fill remaining space with ' '; 5 is for len('clock')
+		for i in range(self.columns - len(data['clock']) - 5):
+			temp += ' '
+			
+		# Show clock
+		temp += data['clock']
+		
+		# Check if data has changed
+		if (self.display_data[0] != temp):
+			self.display_data[0] = temp
+			data_changed = True
+			
+		temp = ''
+		
+		# If it can fit, show date label
+		if ((len('Date') + 1 + len(data['date'])) <= self.columns):
+			temp += 'Date'
+			
+			# Fill remaining space with ' '
+			for i in range(self.columns - (len('Date') + len(data['date']))):
+				temp += ' '
+				
+		# Show date
+		temp += data['date']
+		
+		# Fill remaining space with ' '
+		for i in range(self.columns - len(temp)):
+			temp += ' '
+			
+		# Check if data has changed
+		if (self.display_data[1] != temp):
+			self.display_data[1] = temp
+			data_changed = True
+			
+		self.wait_time = 1000 / self.period
+			
+		return data_changed
+		
+	# This screen shows CPU temperature and RAM usage
+	def screen_5(self):
+		data_changed = False
+		skip_lines = 0
+		
+		# If it's a 2x16 display, show this in lines 1 and 2, in case of 4x20 display, show it in 3 and 4
+		if (self.rows >= 4):
+			skip_lines = 2
+		
+		else:
+			skip_lines = 0
+		
+		# Get CPU temperature
+		temperature = self.getCPUtemperature()
+			
+		temp = ''
+		
+		# Show label
+		temp += 'CPU Temp'
+		
+		# If it fits, put a dot on temp :), 3 is for celsius sign, C and space
+		if ((len('CPU Temp. ') + len(temperature) + 3) <= self.columns):
+			temp += '.'
+			
+		# Fill remaining space with ' '
+		for i in range(self.columns - len(temp) - len(temperature) - 3):
+			temp += ' '
+			
+		# Show temperature and sign
+		temp += temperature + ' ' + chr(223) + 'C'
+		
+		# Check if data has changed
+		if (self.display_data[skip_lines] != temp):
+			self.display_data[skip_lines] = temp
+			data_changed = True	
+			
+		# Get RAM usage
+		ram = self.getRAMinfo()
+		
+		temp = ''
+		
+		# Show label
+		temp += 'RAM'
+		
+		# Fill remaining space with ' '
+		for i in range(self.columns - len(temp) - len(ram[1] + '/' + ram[0]) - 3):
+			temp += ' '
+			
+		# Show RAM
+		temp += ram[1] + '/' + ram[0] + ' MB'
+		
+		# Check if data has changed
+		if (self.display_data[skip_lines + 1] != temp):
+			self.display_data[skip_lines + 1] = temp
+			data_changed = True
+			
+		self.wait_time = 1000 / self.period
 		
 		return data_changed
 			
@@ -695,6 +995,50 @@ class display:
 				# Else return to screen 0
 				else:
 					self.screen == 0
+					
+			# Else if screen is 2
+			elif (self.screen == 2):
+				# If display is 4x20
+				if (self.rows >= 4):
+					data_changed1 = self.screen_2()
+					data_changed2 = self.screen_3()
+					data_changed = data_changed1 or data_changed2
+					
+				# Else it's a 2x16
+				else:
+					data_changed = self.screen_2()
+					
+			# Else if screen is 3
+			elif (self.screen == 3):
+				# 1 is only for 2x16 display
+				if (self.rows < 4):
+					data_changed = self.screen_3()
+					
+				# Else return to screen 2
+				else:
+					self.screen == 2
+					
+			# Else if screen is 4
+			elif (self.screen == 4):
+				# If display is 4x20
+				if (self.rows >= 4):
+					data_changed1 = self.screen_4()
+					data_changed2 = self.screen_5()
+					data_changed = data_changed1 or data_changed2
+					
+				# Else it's a 2x16
+				else:
+					data_changed = self.screen_4()
+					
+			# Else if screen is 5
+			elif (self.screen == 5):
+				# 1 is only for 2x16 display
+				if (self.rows < 4):
+					data_changed = self.screen_5()
+					
+				# Else return to screen 4
+				else:
+					self.screen == 4
 			
 			# If data has changed, update display
 			if (data_changed):					
@@ -706,8 +1050,6 @@ class display:
 				self.lock_display = False
 				
 				data_changed = False
-				
-			self.wait_time = self.scroll_period
 				
 	# Function for starting display thread
 	def start(self):

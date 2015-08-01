@@ -28,7 +28,6 @@ class remote:
 			while True:
 				message = pipe.read().strip() # Read message from pipe
 				if message:
-					print message
 					# Change display mode
 					if (message == 'KEY_ENTER'):
 						if (self.display != False):
