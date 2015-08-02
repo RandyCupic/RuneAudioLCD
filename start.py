@@ -34,8 +34,8 @@ I2C_DISPLAY_ADDRESS = 0X27
 # This program generates LCD output dynamically
 # Which means that it support both 20x4 and 16x2 LCDs
 # Specify LCD size (for example 20x4 or 16x2 LCD
-LCD_COLUMNS = 16
-LCD_ROWS = 2
+LCD_COLUMNS = 20
+LCD_ROWS = 4
 
 # Specify scrolling period (for artist and title) in SECONDS
 # WARNING: By decreasing scrolling_period, CPU usage increases fast
@@ -113,7 +113,7 @@ mpdcl.start()
 # If enabled, nitialize display instance
 if LCD_ENABLE:
 	# I2C display is chosen
-	if (DISPLAY_TYPE == 0)
+	if (DISPLAY_TYPE == 0):
 		display = i2c_display.i2c_display(I2C_DISPLAY_ADDRESS, LCD_ROWS, LCD_COLUMNS, TEMPORARY_SCREEN_PERIOD, SCROLLING_PERIOD)
 	
 	# Let MPD and display know for each other
@@ -128,8 +128,9 @@ if REMOTE_ENABLE:
 	remote = ir_remote.remote(IR_PIPELINE)
 	remote.start()
 
-	# Let it know about display
-	remote.register_display(display)
+	# Let it know about display, if display is enabled
+	if LCD_ENABLE:
+		remote.register_display(display)
 
 # If buttons are enabled, initialize them
 if BUTTONS_ENABLE:

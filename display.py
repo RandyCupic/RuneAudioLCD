@@ -13,6 +13,9 @@ class display:
 		# Default update time (period)
 		self.period = 0.01 # s
 		
+		# Backlight state (needed for toggle)
+		self.backlight_state = True
+		
 		# Initialize LCD
 		self.lcd_initialize()
 		
@@ -141,6 +144,18 @@ class display:
 				tmp = tmp + '\n';
 
 		self.lcd_message(tmp);
+		
+	# Function for toggling on/off LCD backlight
+	def toggle_backlight(self):
+		# If it's on currently, turn it off
+		if self.backlight_state:
+			self.lcd_backlight(False)
+			self.backlight_state = False
+		
+		# Otherwise, turn it on
+		else:
+			self.lcd_backlight(True)
+			self.backlight_state = True
 			
 	# Function for scrolling text, receives row id and text
 	# Every time it's called, it will scroll one character

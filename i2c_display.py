@@ -115,7 +115,7 @@ class i2c_display(display.display):
 
 		sleep(0.2)
 		
-	# Toggle backlight on/off (State == True -> ON, State == False -> OFF)
+	# Toggle backlight on/off, it uses a variable with stored data
 	''' OVERRIDED FROM DISPLAY '''
 	def lcd_backlight(self, state):
 		if state == True:
@@ -125,14 +125,24 @@ class i2c_display(display.display):
 		
 	# Clocks EN to latch command
 	def lcd_strobe(self, data):
-		self.lcd_device.write_cmd(data | En | LCD_BACKLIGHT)
+		if (self.backlight_state == True):
+			backlight = LCD_BACKLIGHT
+		else:
+			backlight =LCD_NOBACKLIGHT
+		
+		self.lcd_device.write_cmd(data | En | backlight)
 		sleep(.0005)
-		self.lcd_device.write_cmd(((data & ~En) | LCD_BACKLIGHT))
+		self.lcd_device.write_cmd(((data & ~En) | backlight))
 		sleep(.0001)
-	
+
 	# Write four bits to LCD
 	def lcd_write_four_bits(self, data):
-		self.lcd_device.write_cmd(data | LCD_BACKLIGHT)
+		if (self.backlight_state == True):
+			backlight = LCD_BACKLIGHT
+		else:
+			backlight =LCD_NOBACKLIGHT
+	
+		self.lcd_device.write_cmd(data | backlight)
 		self.lcd_strobe(data)
 
 	# Write a command to lcd

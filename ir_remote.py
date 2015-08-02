@@ -32,6 +32,11 @@ class remote:
 					if (message == 'KEY_ENTER'):
 						if (self.display != False):
 							self.display.change_screen()
+							
+					# Toggle backlight
+					if (message == 'KEY_MUTE'):
+						if (self.display != False):
+							self.display.toggle_backlight()
 				time.sleep(0.01)
 				
 	# Start main remote thread
