@@ -541,13 +541,15 @@ class display:
 		
 		# Get clock
 		try:
-			clock = data[4]
+			clock = data[3]
 		except KeyError:
 			clock = ''
 			
+		print data
+		
 		# Get date
 		try:
-			date = data[3] + ' ' + data[1] + ' ' + data[6]
+			date = data[2] + ' ' + data[1] + ' ' + data[5]
 		except KeyError:
 			date = ''
 		
