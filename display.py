@@ -537,7 +537,7 @@ class display:
 	def get_datetime(self):
 		p = os.popen('date')
 		line = p.readline().strip()
-		data = line.split(' ')
+		data = line.split()
 		
 		# Get clock
 		try:
